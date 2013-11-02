@@ -21,6 +21,7 @@
 #define GDB_PYTHON_H
 
 #include "value.h"
+#include "varobj.h"
 #include "mi/mi-cmds.h"
 
 struct breakpoint_object;
@@ -120,5 +121,39 @@ void *start_type_printers (void);
 char *apply_type_printers (void *, struct type *type);
 
 void free_type_printers (void *arg);
+
+#ifdef HAVE_PYTHON
+
+/* These come from py-varobj.c, and don't exist without python.  */
+
+int gdbpy_varobj_set_visualizer (struct varobj *var, const char *visualizer);
+
+void gdbpy_install_new_value_visualizer (struct varobj *var,
+					 int default_visualizer_enabled);
+
+int gdbpy_update_dynamic_varobj_children (struct varobj *var,
+					  struct dynamic_child_data *,
+					  int update_children,
+					  int from, int to);
+
+char *gdbpy_get_varobj_display_hint (struct varobj *var);
+
+int gdbpy_get_varobj_print_value (struct varobj *var,
+				  enum varobj_display_formats format,
+				  struct value *value, struct ui_file *stb);
+
+void gdbpy_varobj_alloc_variable (struct varobj *var);
+
+void gdbpy_varobj_free_variable (struct varobj *var);
+
+void gdbpy_varobj_set_children_requested (struct varobj *var);
+
+int gdbpy_varobj_children_requested_p (struct varobj *var);
+
+int gdbpy_varobj_has_saved_item (struct varobj *var);
+
+int gdbpy_varobj_pretty_printed_p (struct varobj *var);
+
+#endif
 
 #endif /* GDB_PYTHON_H */

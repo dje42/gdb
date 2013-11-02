@@ -92,6 +92,7 @@ DEF_VEC_O (varobj_update_result);
 
 struct varobj_root;
 struct varobj_dynamic;
+struct dynamic_child_data;
 
 /* Every variable in the system has a structure of this type defined
    for it.  This structure holds all information necessary to manipulate
@@ -245,6 +246,8 @@ extern char *varobj_get_objname (struct varobj *var);
 
 extern char *varobj_get_expression (struct varobj *var);
 
+extern struct expression *varobj_get_gdb_expression (struct varobj *var);
+
 extern int varobj_delete (struct varobj *var, char ***dellist,
 			  int only_children);
 
@@ -268,6 +271,12 @@ extern void varobj_set_child_range (struct varobj *var, int from, int to);
 extern char *varobj_get_display_hint (struct varobj *var);
 
 extern int varobj_get_num_children (struct varobj *var);
+
+extern void varobj_install_dynamic_child (struct varobj *var,
+					  struct dynamic_child_data *,
+					  int index,
+					  char *name,
+					  struct value *value);
 
 /* Return the list of children of VAR.  The returned vector should not
    be modified in any way.  FROM and TO are in/out parameters
@@ -331,8 +340,8 @@ extern char *varobj_value_get_print_value (struct value *value,
 					   enum varobj_display_formats format,
 					   struct varobj *var);
 
-extern void varobj_formatted_print_options (struct value_print_options *opts,
-					    enum varobj_display_formats format);
+extern void varobj_raw_formatted_print_options
+  (struct value_print_options *opts, enum varobj_display_formats format);
 
 extern void varobj_restrict_range (VEC (varobj_p) *children, int *from,
 				   int *to);

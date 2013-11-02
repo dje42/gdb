@@ -311,7 +311,8 @@ SUBDIR_PYTHON_OBS = \
 	py-threadevent.o \
 	py-type.o \
 	py-utils.o \
-	py-value.o
+	py-value.o \
+	py-varobj.o
 
 SUBDIR_PYTHON_SRCS = \
 	python/python.c \
@@ -346,7 +347,8 @@ SUBDIR_PYTHON_SRCS = \
 	python/py-threadevent.c \
 	python/py-type.c \
 	python/py-utils.c \
-	python/py-value.c
+	python/py-value.c \
+	python/py-varobj.c
 SUBDIR_PYTHON_DEPS =
 SUBDIR_PYTHON_LDFLAGS=
 SUBDIR_PYTHON_CFLAGS=
@@ -2269,6 +2271,10 @@ py-utils.o: $(srcdir)/python/py-utils.c
 
 py-value.o: $(srcdir)/python/py-value.c
 	$(COMPILE) $(PYTHON_CFLAGS) $(srcdir)/python/py-value.c
+	$(POSTCOMPILE)
+
+py-varobj.o: $(srcdir)/python/py-varobj.c
+	$(COMPILE) $(PYTHON_CFLAGS) $(srcdir)/python/py-varobj.c
 	$(POSTCOMPILE)
 
 #

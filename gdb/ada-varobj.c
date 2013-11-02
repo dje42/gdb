@@ -941,7 +941,7 @@ ada_value_of_variable (struct varobj *var, enum varobj_display_formats format)
 {
   struct value_print_options opts;
 
-  varobj_formatted_print_options (&opts, format);
+  varobj_raw_formatted_print_options (&opts, format);
 
   return ada_varobj_get_value_of_variable (var->value, var->type, &opts);
 }
