@@ -21,8 +21,6 @@
 #include "gdb_string.h"
 #include "interps.h"
 
-/* experimental */
-
 int
 main (int argc, char **argv)
 {
