@@ -20,6 +20,8 @@
 #ifndef GDB_PYTHON_INTERNAL_H
 #define GDB_PYTHON_INTERNAL_H
 
+#include "scripting.h"
+
 /* These WITH_* macros are defined by the CPython API checker that
    comes with the Python plugin for GCC.  See:
    https://gcc-python-plugin.readthedocs.org/en/latest/cpychecker.html
@@ -223,7 +225,7 @@ extern PyTypeObject breakpoint_object_type
 extern PyTypeObject frame_object_type
     CPYCHECKER_TYPE_OBJECT_FOR_TYPEDEF ("frame_object");
 
-typedef struct breakpoint_object
+typedef struct gdbpy_breakpoint_object
 {
   PyObject_HEAD
 
@@ -236,7 +238,7 @@ typedef struct breakpoint_object
 
   /* 1 is this is a FinishBreakpoint object, 0 otherwise.  */
   int is_finish_bp;
-} breakpoint_object;
+} gdbpy_breakpoint_object;
 
 /* Require that BREAKPOINT be a valid breakpoint ID; throw a Python
    exception if it is invalid.  */
@@ -263,7 +265,7 @@ typedef struct breakpoint_object
 
 /* Variables used to pass information between the Breakpoint
    constructor and the breakpoint-created hook function.  */
-extern breakpoint_object *bppy_pending_object;
+extern gdbpy_breakpoint_object *bppy_pending_object;
 
 
 typedef struct
@@ -279,7 +281,33 @@ typedef struct
 
 extern struct cmd_list_element *set_python_list;
 extern struct cmd_list_element *show_python_list;
-
+
+void gdbpy_finish_initialization (void);
+int gdbpy_initialized (void);
+script_sourcer_func gdbpy_source_script;
+int gdbpy_auto_load_enabled (void);
+void gdbpy_eval_from_control_command (struct command_line *cmd);
+void gdbpy_start_type_printers (struct script_type_printers *);
+char *gdbpy_apply_type_printers (const struct script_type_printers *,
+				 struct type *);
+void gdbpy_free_type_printers (struct script_type_printers *);
+int gdbpy_apply_val_pretty_printer
+  (struct type *type, const gdb_byte *valaddr,
+   int embedded_offset, CORE_ADDR address,
+   struct ui_file *stream, int recurse,
+   const struct value *val,
+   const struct value_print_options *options,
+   const struct language_defn *language);
+enum script_bt_status gdbpy_apply_frame_filter
+  (struct frame_info *frame, int flags, enum script_frame_args args_type,
+   struct ui_out *out, int frame_low, int frame_high);
+void gdbpy_preserve_values (struct objfile *objfile, htab_t copied_types);
+int gdbpy_breakpoint_has_cond (struct breakpoint *);
+int gdbpy_breakpoint_cond_says_stop (struct breakpoint *);
+void gdbpy_clear_quit_flag (void);
+void gdbpy_set_quit_flag (void);
+int gdbpy_check_quit_flag (void);
+
 PyObject *gdbpy_history (PyObject *self, PyObject *args);
 PyObject *gdbpy_breakpoints (PyObject *, PyObject *);
 PyObject *gdbpy_frame_stop_reason_string (PyObject *, PyObject *);
@@ -433,9 +461,6 @@ extern const struct language_defn *python_language;
 
 void gdbpy_print_stack (void);
 
-void source_python_script_for_objfile (struct objfile *objfile, FILE *file,
-				       const char *filename);
-
 PyObject *python_string_to_unicode (PyObject *obj);
 char *unicode_to_target_string (PyObject *unicode_str);
 char *python_string_to_target_string (PyObject *obj);
@@ -461,8 +486,8 @@ PyObject *gdbpy_get_varobj_pretty_printer (struct value *value);
 char *gdbpy_get_display_hint (PyObject *printer);
 PyObject *gdbpy_default_visualizer (PyObject *self, PyObject *args);
 
-void bpfinishpy_pre_stop_hook (struct breakpoint_object *bp_obj);
-void bpfinishpy_post_stop_hook (struct breakpoint_object *bp_obj);
+void bpfinishpy_pre_stop_hook (struct gdbpy_breakpoint_object *bp_obj);
+void bpfinishpy_post_stop_hook (struct gdbpy_breakpoint_object *bp_obj);
 
 extern PyObject *gdbpy_doc_cst;
 extern PyObject *gdbpy_children_cst;

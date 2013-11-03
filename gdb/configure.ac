@@ -712,6 +712,10 @@ else
   fi
 fi
 
+# --------------------- #
+# Check for libpython.  #
+# --------------------- #
+
 dnl Utility to simplify finding libpython.
 dnl $1 = pythonX.Y
 dnl $2 = the shell variable to assign the result to
@@ -1040,15 +1044,128 @@ if test "${have_libpython}" != no; then
   AC_MSG_RESULT(${python_has_threads})
   CPPFLAGS="${saved_CPPFLAGS}"
 else
-  # Even if Python support is not compiled in, we need to have these files
-  # included.
-  CONFIG_OBS="$CONFIG_OBS python.o py-value.o py-prettyprint.o py-auto-load.o"
-  CONFIG_SRCS="$CONFIG_SRCS python/python.c python/py-value.c \
-	python/py-prettyprint.c python/py-auto-load.c"
+  # Even if Python support is not compiled in, we need to have this file
+  # included so that the "python" command, et.al., still exists.
+  CONFIG_OBS="$CONFIG_OBS python.o"
+  CONFIG_SRCS="$CONFIG_SRCS python/python.c"
 fi
 AC_SUBST(PYTHON_CFLAGS)
 AC_SUBST(PYTHON_CPPFLAGS)
 AC_SUBST(PYTHON_LIBS)
+
+# -------------------- #
+# Check for libguile.  #
+# -------------------- #
+
+dnl Utility to simplify finding libguile.
+dnl $1 = guile-config-program
+dnl $2 = yes|no, indicating whether to flag errors or ignore them
+dnl $3 = the shell variable to assign the result to
+dnl      If libguile is found we store "yes" here.
+
+dnl FIXME: Need to support pkg-config guile-2.0 --cflags|--libs
+
+AC_DEFUN([AC_TRY_LIBGUILE],
+[
+  guile_config=$1
+  flag_errors=$2
+  define([have_libguile_var],$3)
+  found_usable_guile=checking
+  AC_MSG_CHECKING([for usable guile from ${guile_config}])
+  new_CPPFLAGS=`${guile_config} compile`
+  if test $? != 0; then
+    if test "${flag_errors}" = yes; then
+      AC_ERROR(failure running guile-config compile)
+    fi
+    found_usable_guile=no
+  fi
+  new_LIBS=`${guile_config} link`
+  if test $? != 0; then
+    if test "${flag_errors}" = yes; then
+      AC_ERROR(failure running guile-config link)
+    fi
+    found_usable_guile=no
+  fi
+  if test "${found_usable_guile}" = checking; then
+    save_CPPFLAGS=$CPPFLAGS
+    save_LIBS=$LIBS
+    CPPFLAGS="$CPPFLAGS $new_CPPFLAGS"
+    LIBS="$LIBS $new_LIBS"
+    AC_LINK_IFELSE(AC_LANG_PROGRAM([[#include "libguile.h"]],
+                                   [[scm_init_guile ();]]),
+                   [have_libguile_var=yes
+                    found_usable_guile=yes
+                    GUILE_CPPFLAGS=$new_CPPFLAGS
+                    GUILE_LIBS=$new_LIBS],
+		   [found_usable_guile=no])
+    CPPFLAGS=$save_CPPFLAGS
+    LIBS=$save_LIBS
+  fi
+  AC_MSG_RESULT([${found_usable_guile}])
+])
+
+dnl There are several different values for --with-guile:
+dnl
+dnl no -   Don't include guile support.
+dnl yes -  Include guile support, error if it's missing.
+dnl        The guile-config program must be in $PATH.
+dnl auto - Same as "yes", but if guile is missing from the system,
+dnl        fall back to "no".
+dnl /path/to/guile-config -
+dnl        Use the guile-config program located in this directory.
+dnl        NOTE: This needn't be the "real" guile-config program.
+dnl        In a cross-compilation scenario (build != host), this could be
+dnl        a shell script that provides what guile-config provides for
+dnl        "compile" and "link".
+
+AC_ARG_WITH(guile,
+  AS_HELP_STRING([--with-guile@<:@=GUILE@:>@], [include guile support (auto/yes/no/<guile-config-program>)]),
+  [], [with_guile=auto])
+AC_MSG_CHECKING([whether to use guile])
+AC_MSG_RESULT([$with_guile])
+
+have_libguile=no
+case "${with_guile}" in
+no)
+  AC_MSG_WARN([guile support disabled; some features may be unavailable.])
+  ;;
+auto)
+  AC_TRY_LIBGUILE(guile-config, no, have_libguile)
+  ;;
+yes)
+  AC_TRY_LIBGUILE(guile-config, yes, have_libguile)
+  ;;
+[[\\/]]* | ?:[[\\/]]*)
+  AC_TRY_LIBGUILE(${with_guile}, yes, have_libguile)
+  ;;
+*/*)
+  # Disallow --with-guile=foo/bar.
+  AC_ERROR(invalid value for --with-guile)
+  ;;
+*)
+  AC_ERROR(invalid value for --with-guile)
+  ;;
+esac
+
+if test "${have_libguile}" != no; then
+  AC_DEFINE(HAVE_GUILE, 1, [Define if Guile interpreter is being linked in.])
+  CONFIG_OBS="$CONFIG_OBS \$(SUBDIR_GUILE_OBS)"
+  CONFIG_DEPS="$CONFIG_DEPS \$(SUBDIR_GUILE_DEPS)"
+  CONFIG_SRCS="$CONFIG_SRCS \$(SUBDIR_GUILE_SRCS)"
+  CONFIG_INSTALL="$CONFIG_INSTALL install-guile"
+  ENABLE_CFLAGS="$ENABLE_CFLAGS \$(SUBDIR_GUILE_CFLAGS)"
+else
+  # Even if Guile support is not compiled in, we need to have these files
+  # included.
+  CONFIG_OBS="$CONFIG_OBS guile.o"
+  CONFIG_SRCS="$CONFIG_SRCS guile/guile.c"
+fi
+AC_SUBST(GUILE_CPPFLAGS)
+AC_SUBST(GUILE_LIBS)
+
+# --------------------- #
+# Check for libmcheck.  #
+# --------------------- #
 
 # Enable -lmcheck by default (it provides cheap-enough memory mangling),
 # but turn it off if Python is enabled with threads, since -lmcheck is

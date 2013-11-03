@@ -1048,14 +1048,6 @@ condition_command (char *arg, int from_tty)
   ALL_BREAKPOINTS (b)
     if (b->number == bnum)
       {
-	/* Check if this breakpoint has a Python object assigned to
-	   it, and if it has a definition of the "stop"
-	   method.  This method and conditions entered into GDB from
-	   the CLI are mutually exclusive.  */
-	if (b->py_bp_object
-	    && gdbpy_breakpoint_has_py_cond (b->py_bp_object))
-	  error (_("Cannot set a condition where a Python 'stop' "
-		   "method has been defined in the breakpoint."));
 	set_breakpoint_condition (b, p, from_tty);
 
 	if (is_breakpoint (b))
@@ -4648,10 +4640,19 @@ bpstat_print (bpstat bs, int kind)
   return PRINT_UNKNOWN;
 }
 
-/* Evaluate the expression EXP and return 1 if value is zero.  This is
+/* Evaluate the expression EXP and return 1 if value is nonzero.  This is
    used inside a catch_errors to evaluate the breakpoint condition.
    The argument is a "struct expression *" that has been cast to a
    "char *" to make it pass through catch_errors.  */
+/* FIXME: This returns the inverse of the condition because it is called
+   from catch_errors which returns 0 if an exception happened.  Geez.
+   catch_errors is deprecated, but catch_exceptions_with_msg doesn't support
+   passing catch_error's errstring argument.  Double Geez.
+   Ultimately, I think the fix is to add errstring to catch_exceptions_with_msg
+   and use that, but in the interests of doing such work separately, we take
+   a quick-hack approach here.  Blech.
+   For those with a penchant for being pedantic, GDB could make good use of
+   C++, but I'm setting that aside for the moment.  */
 
 static int
 breakpoint_cond_eval (void *exp)
@@ -5098,7 +5099,6 @@ bpstat_check_watchpoint (bpstat bs)
     }
 }
 
-
 /* Check conditions (condition proper, frame, thread and ignore count)
    of breakpoint referred to by BS.  If we should not stop for this
    breakpoint, set BS->stop to 0.  */
@@ -5109,6 +5109,11 @@ bpstat_check_breakpoint_conditions (bpstat bs, ptid_t ptid)
   int thread_id = pid_to_thread_id (ptid);
   const struct bp_location *bl;
   struct breakpoint *b;
+  struct expression *cli_cond;
+  int cli_cond_is_true;
+  int have_script_cond, script_cond_is_true;
+
+  gdb_assert (bs->stop);
 
   /* BS is built for existing struct breakpoint.  */
   bl = bs->bp_location_at;
@@ -5122,111 +5127,135 @@ bpstat_check_breakpoint_conditions (bpstat bs, ptid_t ptid)
 
   if (frame_id_p (b->frame_id)
       && !frame_id_eq (b->frame_id, get_stack_frame_id (get_current_frame ())))
-    bs->stop = 0;
-  else if (bs->stop)
     {
-      int value_is_zero = 0;
-      struct expression *cond;
+      bs->stop = 0;
+      return;
+    }
 
-      /* Evaluate Python breakpoints that have a "stop"
-	 method implemented.  */
-      if (b->py_bp_object)
-	bs->stop = gdbpy_should_stop (b->py_bp_object);
+  /* Don't evaluate the condition if this is a thread-specific breakpoint for
+     a different thread.  */
+
+  if (b->thread != -1 && b->thread != thread_id)
+    {
+      bs->stop = 0;
+      return;
+    }
+
+  /* Similarly, don't evaluate the condition if we're still ignoring this
+     breakpoint.  */
+
+  if (b->ignore_count > 0)
+    {
+      b->ignore_count--;
+      bs->stop = 0;
+      /* Increase the hit count even though we don't stop.  */
+      ++(b->hit_count);
+      observer_notify_breakpoint_modified (b);
+      return;
+    }	
+
+  /* The default is to stop when the breakpoint is reached.
+     However, if the breakpoint has a condition (either from the CLI,
+     or from a scripting language), then only stop if at least one of
+     the conditions is TRUE.  */
+
+  /* Evaluate Python/Scheme breakpoints that have a "stop"
+     method implemented.  */
+  have_script_cond = breakpoint_has_script_cond (b);
+  script_cond_is_true = 0;
+  if (have_script_cond)
+    script_cond_is_true = breakpoint_script_cond_says_stop (b);
+
+  if (is_watchpoint (b))
+    {
+      struct watchpoint *w = (struct watchpoint *) b;
+
+      cli_cond = w->cond_exp;
+    }
+  else
+    cli_cond = bl->cond;
+  cli_cond_is_true = 0;
+
+  if (cli_cond && b->disposition != disp_del_at_next_stop)
+    {
+      int within_current_scope = 1;
+      struct watchpoint * w;
+
+      /* We use value_mark and value_free_to_mark because it could
+	 be a long time before we return to the command level and
+	 call free_all_values.  We can't call free_all_values
+	 because we might be in the middle of evaluating a
+	 function call.  */
+      struct value *mark = value_mark ();
 
       if (is_watchpoint (b))
-	{
-	  struct watchpoint *w = (struct watchpoint *) b;
+	w = (struct watchpoint *) b;
+      else
+	w = NULL;
 
-	  cond = w->cond_exp;
+      /* Need to select the frame, with all that implies so that
+	 the conditions will have the right context.  Because we
+	 use the frame, we will not see an inlined function's
+	 variables when we arrive at a breakpoint at the start
+	 of the inlined function; the current frame will be the
+	 call site.  */
+      if (w == NULL || w->cond_exp_valid_block == NULL)
+	select_frame (get_current_frame ());
+      else
+	{
+	  struct frame_info *frame;
+
+	  /* For local watchpoint expressions, which particular
+	     instance of a local is being watched matters, so we
+	     keep track of the frame to evaluate the expression
+	     in.  To evaluate the condition however, it doesn't
+	     really matter which instantiation of the function
+	     where the condition makes sense triggers the
+	     watchpoint.  This allows an expression like "watch
+	     global if q > 10" set in `func', catch writes to
+	     global on all threads that call `func', or catch
+	     writes on all recursive calls of `func' by a single
+	     thread.  We simply always evaluate the condition in
+	     the innermost frame that's executing where it makes
+	     sense to evaluate the condition.  It seems
+	     intuitive.  */
+	  frame = block_innermost_frame (w->cond_exp_valid_block);
+	  if (frame != NULL)
+	    select_frame (frame);
+	  else
+	    within_current_scope = 0;
+	}
+      if (within_current_scope)
+	{
+	  int cond_result =
+	    catch_errors (breakpoint_cond_eval, cli_cond,
+			  "Error in testing breakpoint condition:\n",
+			  RETURN_MASK_ALL);
+
+	  /* See FIXME for breakpoint_cond_eval.  */
+	  cli_cond_is_true = !cond_result;
 	}
       else
-	cond = bl->cond;
-
-      if (cond && b->disposition != disp_del_at_next_stop)
 	{
-	  int within_current_scope = 1;
-	  struct watchpoint * w;
-
-	  /* We use value_mark and value_free_to_mark because it could
-	     be a long time before we return to the command level and
-	     call free_all_values.  We can't call free_all_values
-	     because we might be in the middle of evaluating a
-	     function call.  */
-	  struct value *mark = value_mark ();
-
-	  if (is_watchpoint (b))
-	    w = (struct watchpoint *) b;
-	  else
-	    w = NULL;
-
-	  /* Need to select the frame, with all that implies so that
-	     the conditions will have the right context.  Because we
-	     use the frame, we will not see an inlined function's
-	     variables when we arrive at a breakpoint at the start
-	     of the inlined function; the current frame will be the
-	     call site.  */
-	  if (w == NULL || w->cond_exp_valid_block == NULL)
-	    select_frame (get_current_frame ());
-	  else
-	    {
-	      struct frame_info *frame;
-
-	      /* For local watchpoint expressions, which particular
-		 instance of a local is being watched matters, so we
-		 keep track of the frame to evaluate the expression
-		 in.  To evaluate the condition however, it doesn't
-		 really matter which instantiation of the function
-		 where the condition makes sense triggers the
-		 watchpoint.  This allows an expression like "watch
-		 global if q > 10" set in `func', catch writes to
-		 global on all threads that call `func', or catch
-		 writes on all recursive calls of `func' by a single
-		 thread.  We simply always evaluate the condition in
-		 the innermost frame that's executing where it makes
-		 sense to evaluate the condition.  It seems
-		 intuitive.  */
-	      frame = block_innermost_frame (w->cond_exp_valid_block);
-	      if (frame != NULL)
-		select_frame (frame);
-	      else
-		within_current_scope = 0;
-	    }
-	  if (within_current_scope)
-	    value_is_zero
-	      = catch_errors (breakpoint_cond_eval, cond,
-			      "Error in testing breakpoint condition:\n",
-			      RETURN_MASK_ALL);
-	  else
-	    {
-	      warning (_("Watchpoint condition cannot be tested "
-			 "in the current scope"));
-	      /* If we failed to set the right context for this
-		 watchpoint, unconditionally report it.  */
-	      value_is_zero = 0;
-	    }
-	  /* FIXME-someday, should give breakpoint #.  */
-	  value_free_to_mark (mark);
+	  warning (_("Watchpoint condition cannot be tested "
+		     "in the current scope"));
+	  /* If we failed to set the right context for this
+	     watchpoint, unconditionally report it.  */
+	  cli_cond_is_true = 1;
 	}
+      /* FIXME-someday, should give breakpoint #.  */
+      value_free_to_mark (mark);
+    }
 
-      if (cond && value_is_zero)
-	{
-	  bs->stop = 0;
-	}
-      else if (b->thread != -1 && b->thread != thread_id)
-	{
-	  bs->stop = 0;
-	}
-      else if (b->ignore_count > 0)
-	{
-	  b->ignore_count--;
-	  bs->stop = 0;
-	  /* Increase the hit count even though we don't stop.  */
-	  ++(b->hit_count);
-	  observer_notify_breakpoint_modified (b);
-	}	
+  /* Stop if any condition says so.  */
+  if (cli_cond || have_script_cond)
+    {
+      /* bs->stop is already set, so we only have to handle the negative
+	 result: Only continue if all conditions are false.  */
+      if (!cli_cond_is_true && !script_cond_is_true)
+	bs->stop = 0;
     }
 }
-
 
 /* Get a bpstat associated with having just stopped at address
    BP_ADDR in thread PTID.

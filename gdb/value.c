@@ -2266,7 +2266,7 @@ preserve_values (struct objfile *objfile)
   for (var = internalvars; var; var = var->next)
     preserve_one_internalvar (var, objfile, copied_types);
 
-  preserve_python_values (objfile, copied_types);
+  preserve_script_values (objfile, copied_types);
 
   htab_delete (copied_types);
 }

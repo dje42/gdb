@@ -24,10 +24,12 @@
 #define LANGUAGE_H 1
 
 /* Forward decls for prototypes.  */
+struct block;
 struct value;
 struct objfile;
 struct frame_info;
 struct expression;
+struct symbol;
 struct ui_file;
 struct value_print_options;
 struct type_print_options;

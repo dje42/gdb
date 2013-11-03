@@ -764,9 +764,9 @@ val_print (struct type *type, const gdb_byte *valaddr, int embedded_offset,
 
   if (!options->raw)
     {
-      ret = apply_val_pretty_printer (type, valaddr, embedded_offset,
-				      address, stream, recurse,
-				      val, options, language);
+      ret = apply_val_script_pretty_printer (type, valaddr, embedded_offset,
+					     address, stream, recurse,
+					     val, options, language);
       if (ret)
 	return;
     }
@@ -861,12 +861,13 @@ value_print (struct value *val, struct ui_file *stream,
 
   if (!options->raw)
     {
-      int r = apply_val_pretty_printer (value_type (val),
-					value_contents_for_printing (val),
-					value_embedded_offset (val),
-					value_address (val),
-					stream, 0,
-					val, options, current_language);
+      int r =
+	apply_val_script_pretty_printer (value_type (val),
+					 value_contents_for_printing (val),
+					 value_embedded_offset (val),
+					 value_address (val),
+					 stream, 0,
+					 val, options, current_language);
 
       if (r)
 	return;

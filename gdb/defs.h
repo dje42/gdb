@@ -167,7 +167,9 @@ extern char *debug_file_directory;
    for Python and GDB SIGINT handling to coexist seamlessly.
 
    If GDB is built without Python, it instead uses its traditional
-   variables.  */
+   variables.
+
+   TODO: Guile support.  */
 
 /* Clear the quit flag.  */
 extern void clear_quit_flag (void);
@@ -417,6 +419,7 @@ enum command_control_type
     if_control,
     commands_control,
     python_control,
+    guile_control,
     while_stepping_control,
     invalid_control
   };

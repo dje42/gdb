@@ -52,9 +52,7 @@
 #include "ctf.h"
 #include "ada-lang.h"
 #include "linespec.h"
-#ifdef HAVE_PYTHON
-#include "python/python-internal.h"
-#endif
+#include "scripting.h"
 
 #include <ctype.h>
 #include <sys/time.h>
@@ -1816,10 +1814,10 @@ mi_cmd_list_features (char *command, char **argv, int argc)
       ui_out_field_string (uiout, NULL, "breakpoint-notifications");
       ui_out_field_string (uiout, NULL, "ada-task-info");
       
-#if HAVE_PYTHON
-      if (gdb_python_initialized)
+      if (script_lang_python_initialized ())
 	ui_out_field_string (uiout, NULL, "python");
-#endif
+      if (script_lang_guile_initialized ())
+	ui_out_field_string (uiout, NULL, "guile");
       
       do_cleanups (cleanup);
       return;

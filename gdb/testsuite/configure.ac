@@ -97,5 +97,6 @@ AC_OUTPUT([Makefile \
   gdb.hp/gdb.defects/Makefile gdb.linespec/Makefile \
   gdb.mi/Makefile gdb.modula2/Makefile gdb.multi/Makefile \
   gdb.objc/Makefile gdb.opencl/Makefile gdb.opt/Makefile gdb.pascal/Makefile \
-  gdb.python/Makefile gdb.reverse/Makefile gdb.stabs/Makefile \
+  gdb.python/Makefile gdb.reverse/Makefile \
+  gdb.guile/Makefile gdb.stabs/Makefile \
   gdb.threads/Makefile gdb.trace/Makefile gdb.xml/Makefile])

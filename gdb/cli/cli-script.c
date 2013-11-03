@@ -31,8 +31,8 @@
 #include "cli/cli-decode.h"
 #include "cli/cli-script.h"
 #include "gdb_assert.h"
-
 #include "python/python.h"
+#include "guile/guile.h"
 #include "interps.h"
 
 /* Prototypes for local functions.  */
@@ -247,6 +247,19 @@ print_command_lines (struct ui_out *uiout, struct command_line *cmd,
 	  ui_out_text (uiout, "\n");
 	  /* Don't indent python code at all.  */
 	  print_command_lines (uiout, *list->body_list, 0);
+	  if (depth)
+	    ui_out_spaces (uiout, 2 * depth);
+	  ui_out_field_string (uiout, NULL, "end");
+	  ui_out_text (uiout, "\n");
+	  list = list->next;
+	  continue;
+	}
+
+      if (list->control_type == guile_control)
+	{
+	  ui_out_field_string (uiout, NULL, "guile");
+	  ui_out_text (uiout, "\n");
+	  print_command_lines (uiout, *list->body_list, depth + 1);
 	  if (depth)
 	    ui_out_spaces (uiout, 2 * depth);
 	  ui_out_field_string (uiout, NULL, "end");
@@ -556,6 +569,7 @@ execute_control_command (struct command_line *cmd)
 
 	break;
       }
+
     case commands_control:
       {
 	/* Breakpoint commands list, record the commands in the
@@ -567,12 +581,12 @@ execute_control_command (struct command_line *cmd)
 	ret = commands_from_control_command (new_line, cmd);
 	break;
       }
+
     case python_control:
-      {
-	eval_python_from_control_command (cmd);
-	ret = simple_control;
-	break;
-      }
+    case guile_control:
+      eval_script_from_control_command (cmd);
+      ret = simple_control;
+      break;
 
     default:
       warning (_("Invalid control type in canned commands structure."));
@@ -1007,6 +1021,11 @@ process_next_line (char *p, struct command_line **command, int parse_commands,
 	     here.  */
 	  *command = build_command_line (python_control, "");
 	}
+      else if (p_end - p == 5 && !strncmp (p, "guile", 5))
+	{
+	  /* Note that we ignore the inline "guile command" form here.  */
+	  *command = build_command_line (guile_control, "");
+	}
       else if (p_end - p == 10 && !strncmp (p, "loop_break", 10))
 	{
 	  *command = (struct command_line *)
@@ -1094,7 +1113,8 @@ recurse_read_control_structure (char * (*read_next_line_func) (void),
 
       next = NULL;
       val = process_next_line (read_next_line_func (), &next, 
-			       current_cmd->control_type != python_control,
+			       current_cmd->control_type != python_control
+			       && current_cmd->control_type != guile_control,
 			       validator, closure);
 
       /* Just skip blanks and comments.  */
@@ -1103,10 +1123,12 @@ recurse_read_control_structure (char * (*read_next_line_func) (void),
 
       if (val == end_command)
 	{
+	  /* FIXME: make switch */
 	  if (current_cmd->control_type == while_control
 	      || current_cmd->control_type == while_stepping_control
 	      || current_cmd->control_type == if_control
 	      || current_cmd->control_type == python_control
+	      || current_cmd->control_type == guile_control
 	      || current_cmd->control_type == commands_control)
 	    {
 	      /* Success reading an entire canned sequence of commands.  */
@@ -1160,6 +1182,7 @@ recurse_read_control_structure (char * (*read_next_line_func) (void),
 	  || next->control_type == while_stepping_control
 	  || next->control_type == if_control
 	  || next->control_type == python_control
+	  || next->control_type == guile_control
 	  || next->control_type == commands_control)
 	{
 	  control_level++;
@@ -1278,6 +1301,7 @@ read_command_lines_1 (char * (*read_next_line_func) (void), int parse_commands,
       if (next->control_type == while_control
 	  || next->control_type == if_control
 	  || next->control_type == python_control
+	  || next->control_type == guile_control
 	  || next->control_type == commands_control
 	  || next->control_type == while_stepping_control)
 	{

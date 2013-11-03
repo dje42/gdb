@@ -584,17 +584,16 @@ cp_print_value (struct type *type, struct type *real_type,
 	{
 	  int result = 0;
 
-	  /* Attempt to run the Python pretty-printers on the
+	  /* Attempt to run the scripting language pretty-printers on the
 	     baseclass if possible.  */
 	  if (!options->raw)
-	    result = apply_val_pretty_printer (baseclass, base_valaddr,
-					       thisoffset + boffset,
-					       value_address (base_val),
-					       stream, recurse, base_val,
-					       options, current_language);
+	    result = apply_val_script_pretty_printer (baseclass, base_valaddr,
+						      thisoffset + boffset,
+						      value_address (base_val),
+						      stream, recurse,
+						      base_val, options,
+						      current_language);
 
-
-	  	  
 	  if (!result)
 	    cp_print_value_fields (baseclass, thistype, base_valaddr,
 				   thisoffset + boffset,

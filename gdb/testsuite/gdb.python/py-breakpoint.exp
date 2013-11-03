@@ -261,9 +261,8 @@ delete_breakpoints
 set cond_bp [gdb_get_line_number "Break at multiply."]
 gdb_py_test_silent_cmd  "python eval_bp1 = bp_eval(\"$cond_bp\")" "Set breakpoint" 0
 set test_cond {cond $bpnum}
-gdb_test "$test_cond \"foo==3\"" "Cannot set a condition where a Python.*" \
-    "Check you cannot add a CLI condition to a Python breakpoint that" \
-    "has defined stop"
+gdb_test_no_output "$test_cond \"foo==3\"" \
+    "Check you can add a CLI condition to a Python breakpoint that has defined stop"
 gdb_py_test_silent_cmd  "python eval_bp2 = basic(\"$cond_bp\")" "Set breakpoint" 0
 gdb_py_test_silent_cmd  "python eval_bp2.condition = \"1==1\"" "Set a condition" 0
 gdb_py_test_multiple "Construct an eval function" \
@@ -272,8 +271,7 @@ gdb_py_test_multiple "Construct an eval function" \
   "   return True" "" \
   "end" ""
 
-gdb_test "python eval_bp2.stop = stop_func"  \
-    "RuntimeError: Cannot set 'stop' method.*" \
+gdb_test_no_output "python eval_bp2.stop = stop_func" \
     "Assign stop function to a breakpoint that has a condition"
 
 delete_breakpoints

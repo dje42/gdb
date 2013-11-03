@@ -658,6 +658,8 @@ TARGET_SYSTEM_ROOT
 CONFIG_LDFLAGS
 RDYNAMIC
 ALLOCA
+GUILE_LIBS
+GUILE_CPPFLAGS
 PYTHON_LIBS
 PYTHON_CPPFLAGS
 PYTHON_CFLAGS
@@ -810,6 +812,7 @@ with_gnu_ld
 enable_rpath
 with_libexpat_prefix
 with_python
+with_guile
 enable_libmcheck
 with_included_regex
 with_sysroot
@@ -1527,6 +1530,8 @@ Optional Packages:
   --without-libexpat-prefix     don't search for libexpat in includedir and libdir
   --with-python[=PYTHON]  include python support
                           (auto/yes/no/<python-program>)
+  --with-guile[=GUILE]    include guile support
+                          (auto/yes/no/<guile-config-program>)
   --without-included-regex
                           don't use included regex; this is the default on
                           systems with version 2 of the GNU C library (use
@@ -7962,6 +7967,10 @@ done
   fi
 fi
 
+# --------------------- #
+# Check for libpython.  #
+# --------------------- #
+
 
 
 
@@ -8553,15 +8562,238 @@ rm -f conftest.err conftest.$ac_ext
 $as_echo "${python_has_threads}" >&6; }
   CPPFLAGS="${saved_CPPFLAGS}"
 else
-  # Even if Python support is not compiled in, we need to have these files
-  # included.
-  CONFIG_OBS="$CONFIG_OBS python.o py-value.o py-prettyprint.o py-auto-load.o"
-  CONFIG_SRCS="$CONFIG_SRCS python/python.c python/py-value.c \
-	python/py-prettyprint.c python/py-auto-load.c"
+  # Even if Python support is not compiled in, we need to have this file
+  # included so that the "python" command, et.al., still exists.
+  CONFIG_OBS="$CONFIG_OBS python.o"
+  CONFIG_SRCS="$CONFIG_SRCS python/python.c"
 fi
 
 
 
+
+# -------------------- #
+# Check for libguile.  #
+# -------------------- #
+
+
+
+
+
+
+
+# Check whether --with-guile was given.
+if test "${with_guile+set}" = set; then :
+  withval=$with_guile;
+else
+  with_guile=auto
+fi
+
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to use guile" >&5
+$as_echo_n "checking whether to use guile... " >&6; }
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $with_guile" >&5
+$as_echo "$with_guile" >&6; }
+
+have_libguile=no
+case "${with_guile}" in
+no)
+  { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: guile support disabled; some features may be unavailable." >&5
+$as_echo "$as_me: WARNING: guile support disabled; some features may be unavailable." >&2;}
+  ;;
+auto)
+
+  guile_config=guile-config
+  flag_errors=no
+
+  found_usable_guile=checking
+  { $as_echo "$as_me:${as_lineno-$LINENO}: checking for usable guile from ${guile_config}" >&5
+$as_echo_n "checking for usable guile from ${guile_config}... " >&6; }
+  new_CPPFLAGS=`${guile_config} compile`
+  if test $? != 0; then
+    if test "${flag_errors}" = yes; then
+      as_fn_error "failure running guile-config compile" "$LINENO" 5
+    fi
+    found_usable_guile=no
+  fi
+  new_LIBS=`${guile_config} link`
+  if test $? != 0; then
+    if test "${flag_errors}" = yes; then
+      as_fn_error "failure running guile-config link" "$LINENO" 5
+    fi
+    found_usable_guile=no
+  fi
+  if test "${found_usable_guile}" = checking; then
+    save_CPPFLAGS=$CPPFLAGS
+    save_LIBS=$LIBS
+    CPPFLAGS="$CPPFLAGS $new_CPPFLAGS"
+    LIBS="$LIBS $new_LIBS"
+    cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+#include "libguile.h"
+int
+main ()
+{
+scm_init_guile ();
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_link "$LINENO"; then :
+  have_libguile=yes
+                    found_usable_guile=yes
+                    GUILE_CPPFLAGS=$new_CPPFLAGS
+                    GUILE_LIBS=$new_LIBS
+else
+  found_usable_guile=no
+fi
+rm -f core conftest.err conftest.$ac_objext \
+    conftest$ac_exeext conftest.$ac_ext
+    CPPFLAGS=$save_CPPFLAGS
+    LIBS=$save_LIBS
+  fi
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: ${found_usable_guile}" >&5
+$as_echo "${found_usable_guile}" >&6; }
+
+  ;;
+yes)
+
+  guile_config=guile-config
+  flag_errors=yes
+
+  found_usable_guile=checking
+  { $as_echo "$as_me:${as_lineno-$LINENO}: checking for usable guile from ${guile_config}" >&5
+$as_echo_n "checking for usable guile from ${guile_config}... " >&6; }
+  new_CPPFLAGS=`${guile_config} compile`
+  if test $? != 0; then
+    if test "${flag_errors}" = yes; then
+      as_fn_error "failure running guile-config compile" "$LINENO" 5
+    fi
+    found_usable_guile=no
+  fi
+  new_LIBS=`${guile_config} link`
+  if test $? != 0; then
+    if test "${flag_errors}" = yes; then
+      as_fn_error "failure running guile-config link" "$LINENO" 5
+    fi
+    found_usable_guile=no
+  fi
+  if test "${found_usable_guile}" = checking; then
+    save_CPPFLAGS=$CPPFLAGS
+    save_LIBS=$LIBS
+    CPPFLAGS="$CPPFLAGS $new_CPPFLAGS"
+    LIBS="$LIBS $new_LIBS"
+    cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+#include "libguile.h"
+int
+main ()
+{
+scm_init_guile ();
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_link "$LINENO"; then :
+  have_libguile=yes
+                    found_usable_guile=yes
+                    GUILE_CPPFLAGS=$new_CPPFLAGS
+                    GUILE_LIBS=$new_LIBS
+else
+  found_usable_guile=no
+fi
+rm -f core conftest.err conftest.$ac_objext \
+    conftest$ac_exeext conftest.$ac_ext
+    CPPFLAGS=$save_CPPFLAGS
+    LIBS=$save_LIBS
+  fi
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: ${found_usable_guile}" >&5
+$as_echo "${found_usable_guile}" >&6; }
+
+  ;;
+[\\/]* | ?:[\\/]*)
+
+  guile_config=${with_guile}
+  flag_errors=yes
+
+  found_usable_guile=checking
+  { $as_echo "$as_me:${as_lineno-$LINENO}: checking for usable guile from ${guile_config}" >&5
+$as_echo_n "checking for usable guile from ${guile_config}... " >&6; }
+  new_CPPFLAGS=`${guile_config} compile`
+  if test $? != 0; then
+    if test "${flag_errors}" = yes; then
+      as_fn_error "failure running guile-config compile" "$LINENO" 5
+    fi
+    found_usable_guile=no
+  fi
+  new_LIBS=`${guile_config} link`
+  if test $? != 0; then
+    if test "${flag_errors}" = yes; then
+      as_fn_error "failure running guile-config link" "$LINENO" 5
+    fi
+    found_usable_guile=no
+  fi
+  if test "${found_usable_guile}" = checking; then
+    save_CPPFLAGS=$CPPFLAGS
+    save_LIBS=$LIBS
+    CPPFLAGS="$CPPFLAGS $new_CPPFLAGS"
+    LIBS="$LIBS $new_LIBS"
+    cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+#include "libguile.h"
+int
+main ()
+{
+scm_init_guile ();
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_link "$LINENO"; then :
+  have_libguile=yes
+                    found_usable_guile=yes
+                    GUILE_CPPFLAGS=$new_CPPFLAGS
+                    GUILE_LIBS=$new_LIBS
+else
+  found_usable_guile=no
+fi
+rm -f core conftest.err conftest.$ac_objext \
+    conftest$ac_exeext conftest.$ac_ext
+    CPPFLAGS=$save_CPPFLAGS
+    LIBS=$save_LIBS
+  fi
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: ${found_usable_guile}" >&5
+$as_echo "${found_usable_guile}" >&6; }
+
+  ;;
+*/*)
+  # Disallow --with-guile=foo/bar.
+  as_fn_error "invalid value for --with-guile" "$LINENO" 5
+  ;;
+*)
+  as_fn_error "invalid value for --with-guile" "$LINENO" 5
+  ;;
+esac
+
+if test "${have_libguile}" != no; then
+
+$as_echo "#define HAVE_GUILE 1" >>confdefs.h
+
+  CONFIG_OBS="$CONFIG_OBS \$(SUBDIR_GUILE_OBS)"
+  CONFIG_DEPS="$CONFIG_DEPS \$(SUBDIR_GUILE_DEPS)"
+  CONFIG_SRCS="$CONFIG_SRCS \$(SUBDIR_GUILE_SRCS)"
+  CONFIG_INSTALL="$CONFIG_INSTALL install-guile"
+  ENABLE_CFLAGS="$ENABLE_CFLAGS \$(SUBDIR_GUILE_CFLAGS)"
+else
+  # Even if Guile support is not compiled in, we need to have these files
+  # included.
+  CONFIG_OBS="$CONFIG_OBS guile.o"
+  CONFIG_SRCS="$CONFIG_SRCS guile/guile.c"
+fi
+
+
+
+# --------------------- #
+# Check for libmcheck.  #
+# --------------------- #
 
 # Enable -lmcheck by default (it provides cheap-enough memory mangling),
 # but turn it off if Python is enabled with threads, since -lmcheck is

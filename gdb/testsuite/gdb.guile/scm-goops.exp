@@ -1,0 +1,77 @@
+# Copyright (C) 2010-2013 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# This file is part of the GDB testsuite.
+# It tests using GDB smobs with GOOPS.
+
+load_lib gdb-guile.exp
+
+standard_testfile
+
+# Make this available to gdb.
+# Give the file a new name so we don't clobber the real one if
+# objfile == srcdir.
+# FIXME: Can we get gdb_remote_download to call standard_output_file for us?
+set remote_guile_file [gdb_remote_download host \
+			   ${srcdir}/${subdir}/${testfile}.scm \
+			   ${subdir}/t-${testfile}.scm]
+
+# Start with a fresh gdb.
+gdb_exit
+gdb_start
+
+# Skip all tests if Guile scripting is not enabled.
+if { [skip_guile_tests] } { continue }
+
+# Useful for debugging, and the error tests verify a backtrace is printed.
+gdb_test_no_output "set guile print-stack full"
+
+# Heads up: The output could be several lines of compilation notes or nothing
+# if the cached copy of the compilation is still valid.
+gdb_test "guile (load \"${remote_guile_file}\")" ""
+
+# Install the converters.
+gdb_test_no_output "guile (set-smob-converters! smob->scm scm->smob)"
+
+gdb_test_no_output "guile (define x (make-value 42))"
+
+gdb_test "guile (class-of x)" "#<<class> <my-value> $ghex>"
+
+gdb_test "guile (get-value x)" "#<gdb:value 42>"
+
+gdb_test_no_output "guile (define y (value-add x x))"
+
+gdb_test "guile (class-of y)" "#<<class> <my-value> $ghex>"
+
+gdb_test "guile (get-value y)" "#<gdb:value 84>"
+
+# Install "bad" converters and verify gdb properly flags the error.
+
+gdb_test_no_output "guile (set-smob-converters! smob->scm bad:scm->smob)"
+
+gdb_test "p 23" "= 23"
+gdb_test_no_output "guile (define x (history-ref 0))"
+
+gdb_test "guile (get-value x)" "<gdb:value 23>" "verify smob->scm, error test"
+
+gdb_test "guile (define y (value-sub x x))" \
+    "Backtrace:.* Unbound variable: misspelled-doesnt-exist.*" \
+    "error message from bad *scm->smob*"
+
+gdb_test_no_output "guile (set-smob-converters! bad:smob->scm bad:scm->smob)"
+
+gdb_test "guile (define x (history-ref 0))" \
+    "Backtrace:.* Unbound variable: misspelled-doesnt-exist.*" \
+    "error message from bad *smob->scm*"

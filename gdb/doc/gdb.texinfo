@@ -22135,6 +22135,12 @@ These are @value{GDBN} control commands for the auto-loading:
 @tab Show setting of @value{GDBN} Python scripts.
 @item @xref{info auto-load python-scripts}.
 @tab Show state of @value{GDBN} Python scripts.
+@item @xref{set auto-load guile-scripts}.
+@tab Control for @value{GDBN} Guile scripts.
+@item @xref{show auto-load guile-scripts}.
+@tab Show setting of @value{GDBN} Guile scripts.
+@item @xref{info auto-load guile-scripts}.
+@tab Show state of @value{GDBN} Guile scripts.
 @item @xref{set auto-load scripts-directory}.
 @tab Control for @value{GDBN} auto-loaded scripts location.
 @item @xref{show auto-load scripts-directory}.
@@ -22166,6 +22172,7 @@ These are @value{GDBN} control commands for the auto-loading:
 * Auto-loading safe path::             @samp{set/show/info auto-load safe-path}
 * Auto-loading verbose mode::          @samp{set/show debug auto-load}
 @xref{Python Auto-loading}.
+@xref{Guile Auto-loading}.
 @end menu
 
 @node Init File in the Current Directory
@@ -22834,6 +22841,7 @@ Display the current value of the @code{script-extension} option.
 @menu
 * Sequences::          Canned Sequences of Commands
 * Python::             Scripting @value{GDBN} using Python
+* Guile::              Scripting @value{GDBN} using Guile
 * Aliases::            Creating new spellings of existing commands
 @end menu
 
@@ -23533,6 +23541,23 @@ use in all scripts evaluated by the @code{python} command.
 A string containing the python directory (@pxref{Python}).
 @end defvar
 
+@findex gdb.VERSION
+@defvar gdb.VERSION
+A string containing the @value{GDBN} version.
+@end defvar
+
+@findex gdb.HOST_CONFIG
+@defvar gdb.HOST_CONFIG
+A string containing the host configuration.
+This is the string passed to @code{--host} when @value{GDBN} was configured.
+@end defvar
+
+@findex gdb.TARGET_CONFIG
+@defvar gdb.TARGET_CONFIG
+A string containing the target configuration.
+This is the string passed to @code{--target} when @value{GDBN} was configured.
+@end defvar
+
 @findex gdb.execute
 @defun gdb.execute (command @r{[}, from_tty @r{[}, to_string@r{]]})
 Evaluate @var{command}, a string, as a @value{GDBN} CLI command.
@@ -23836,7 +23861,7 @@ hello-world takes no arguments
 @cindex values from inferior, with Python
 @cindex python, working with values from inferior
 
-@cindex @code{gdb.Value}
+@tindex @code{gdb.Value}
 @value{GDBN} provides values it obtains from the inferior program in
 an object of type @code{gdb.Value}.  @value{GDBN} uses this object
 for its internal bookkeeping of the inferior's values, and for
@@ -24118,8 +24143,8 @@ In Python}).  Otherwise, this method will throw an exception.
 
 If the optional @var{encoding} argument is given, it must be a string
 naming the encoding of the @code{gdb.LazyString}.  Some examples are:
-@samp{ascii}, @samp{iso-8859-6} or @samp{utf-8}.  If the
-@var{encoding} argument is an encoding that @value{GDBN} does
+@code{"ascii"}, @code{"iso-8859-6"} or @code{"utf-8"}.  If the
+@var{encoding} argument is an encoding that @value{GDBN} does not
 recognize, @value{GDBN} will raise an error.
 
 When a lazy string is printed, the @value{GDBN} encoding machinery is
@@ -24185,7 +24210,7 @@ bar = some_type['foo']
 description of the @code{Type.fields} method for a description of the
 @code{gdb.Field} class.
 
-An instance of @code{Type} has the following attributes:
+An instance of @code{gdb.Type} has the following attributes:
 
 @defvar Type.code
 The type code for this type.  The type code will be one of the
@@ -24243,7 +24268,7 @@ non-zero value, which is the size of the field in bits.  Otherwise,
 this will be zero; in this case the field's size is given by its type.
 
 @item type
-The type of the field.  This is usually an instance of @code{Type},
+The type of the field.  This is usually an instance of @code{gdb.Type},
 but it can be @code{None} in some situations.
 @end table
 @end defun
@@ -26339,7 +26364,6 @@ this function returns @code{None}.
 @findex gdb.objfiles
 @defun gdb.objfiles ()
 Return a sequence of all the objfiles current known to @value{GDBN}.
-@xref{Objfiles In Python}.
 @end defun
 
 Each objfile is represented by an instance of the @code{gdb.Objfile}
@@ -26401,7 +26425,7 @@ The following frame-related functions are available in the @code{gdb} module:
 
 @findex gdb.selected_frame
 @defun gdb.selected_frame ()
-Return the selected frame object.  (@pxref{Selection,,Selecting a Frame}).
+Return the selected frame object.  @xref{Selection,,Selecting a Frame}.
 @end defun
 
 @findex gdb.newest_frame
@@ -27044,7 +27068,7 @@ assumed to be a @code{gdb.WP_WRITE} class.
 @defun Breakpoint.stop (self)
 The @code{gdb.Breakpoint} class can be sub-classed and, in
 particular, you may choose to implement the @code{stop} method.
-If this method is defined as a sub-class of @code{gdb.Breakpoint},
+If this method is defined in a sub-class of @code{gdb.Breakpoint},
 it will be called when the inferior reaches any location of a
 breakpoint which instantiates that sub-class.  If the method returns
 @code{True}, the inferior will be stopped at the location of the
@@ -27804,6 +27828,9 @@ substitute_prompt (``frame: \f,
 "frame: main, print arguments: scalars"
 @end smallexample
 @end table
+
+@c Guile docs live in a separate file.
+@include guile.texi
 
 @node Aliases
 @section Creating new spellings of existing commands
@@ -32048,6 +32075,8 @@ access this functionality:
 @tab set frozeness attribute
 @item @code{-var-set-update-range}
 @tab set range of children to display on update
+@item @code{-var-set-visualizer}
+@tab set the pretty-printer for this variable
 @end multitable
 
 In the next subsection we describe each operation in detail and suggest

@@ -104,6 +104,39 @@ PyObject *gdbpy_gdb_error;
 /* The `gdb.MemoryError' exception.  */
 PyObject *gdbpy_gdb_memory_error;
 
+static objfile_script_sourcer_func gdbpy_source_objfile_script;
+
+/* The interface between gdb proper and python scripting.  */
+
+const struct script_language_interface python_scripting_interface =
+{
+  gdbpy_finish_initialization,
+  gdbpy_initialized,
+
+  gdbpy_source_script,
+  gdbpy_source_objfile_script,
+  gdbpy_auto_load_enabled,
+
+  gdbpy_eval_from_control_command,
+
+  gdbpy_start_type_printers,
+  gdbpy_apply_type_printers,
+  gdbpy_free_type_printers,
+
+  gdbpy_apply_val_pretty_printer,
+
+  gdbpy_apply_frame_filter,
+
+  gdbpy_preserve_values,
+
+  gdbpy_breakpoint_has_cond,
+  gdbpy_breakpoint_cond_says_stop,
+
+  gdbpy_check_quit_flag,
+  gdbpy_clear_quit_flag,
+  gdbpy_set_quit_flag,
+};
+
 /* Architecture and language to be used in callbacks from
    the Python interpreter.  */
 struct gdbarch *python_gdbarch;
@@ -170,7 +203,7 @@ ensure_python_env (struct gdbarch *gdbarch,
 /* Clear the quit flag.  */
 
 void
-clear_quit_flag (void)
+gdbpy_clear_quit_flag (void)
 {
   /* This clears the flag as a side effect.  */
   PyOS_InterruptOccurred ();
@@ -179,7 +212,7 @@ clear_quit_flag (void)
 /* Set the quit flag.  */
 
 void
-set_quit_flag (void)
+gdbpy_set_quit_flag (void)
 {
   PyErr_SetInterrupt ();
 }
@@ -187,7 +220,7 @@ set_quit_flag (void)
 /* Return true if the quit flag has been set, false otherwise.  */
 
 int
-check_quit_flag (void)
+gdbpy_check_quit_flag (void)
 {
   return PyOS_InterruptOccurred ();
 }
@@ -344,7 +377,7 @@ compute_python_string (struct command_line *l)
    evaluate its body using the Python interpreter.  */
 
 void
-eval_python_from_control_command (struct command_line *cmd)
+gdbpy_eval_from_control_command (struct command_line *cmd)
 {
   int ret;
   char *script;
@@ -770,7 +803,7 @@ gdbpy_find_pc_line (PyObject *self, PyObject *args)
    the traceback and clear the error indicator.  */
 
 void
-source_python_script (FILE *file, const char *filename)
+gdbpy_source_script (FILE *file, const char *filename)
 {
   struct cleanup *cleanup;
 
@@ -1158,16 +1191,17 @@ gdbpy_progspaces (PyObject *unused1, PyObject *unused2)
 
 /* The "current" objfile.  This is set when gdb detects that a new
    objfile has been loaded.  It is only set for the duration of a call to
-   source_python_script_for_objfile; it is NULL at other times.  */
+   gdbpy_source_objfile_script; it is NULL at other times.  */
 static struct objfile *gdbpy_current_objfile;
 
 /* Set the current objfile to OBJFILE and then read FILE named FILENAME
    as Python code.  This does not throw any errors.  If an exception
-   occurs python will print the traceback and clear the error indicator.  */
+   occurs python will print the traceback and clear the error indicator.
+   This is the script_language_interface.objfile_script_sourcer "method".  */
 
-void
-source_python_script_for_objfile (struct objfile *objfile, FILE *file,
-                                  const char *filename)
+static void
+gdbpy_source_objfile_script (struct objfile *objfile, FILE *file,
+			     const char *filename)
 {
   struct cleanup *cleanups;
 
@@ -1225,18 +1259,18 @@ gdbpy_objfiles (PyObject *unused1, PyObject *unused2)
   return list;
 }
 
-/* Compute the list of active type printers and return it.  The result
-   of this function can be passed to apply_type_printers, and should
-   be freed by free_type_printers.  */
+/* Compute the list of active python type printers and store them in
+   SLANG_PRINTERS->py_type_printers.  The product of this function is used by
+   gdbpy_apply_type_printers, and freed by gdbpy_free_type_printers.  */
 
-void *
-start_type_printers (void)
+void
+gdbpy_start_type_printers (struct script_type_printers *slang_printers)
 {
   struct cleanup *cleanups;
-  PyObject *type_module, *func = NULL, *result_obj = NULL;
+  PyObject *type_module, *func = NULL, *printers_obj = NULL;
 
   if (!gdb_python_initialized)
-    return NULL;
+    return;
 
   cleanups = ensure_python_env (get_current_arch (), current_language);
 
@@ -1254,32 +1288,30 @@ start_type_printers (void)
       goto done;
     }
 
-  result_obj = PyObject_CallFunctionObjArgs (func, (char *) NULL);
-  if (result_obj == NULL)
+  printers_obj = PyObject_CallFunctionObjArgs (func, (char *) NULL);
+  if (printers_obj == NULL)
     gdbpy_print_stack ();
+  else
+    slang_printers->py_type_printers = printers_obj;
 
  done:
   Py_XDECREF (type_module);
   Py_XDECREF (func);
   do_cleanups (cleanups);
-  return result_obj;
 }
 
 /* If TYPE is recognized by some type printer, return a newly
    allocated string holding the type's replacement name.  The caller
-   is responsible for freeing the string.  Otherwise, return NULL.
-
-   This function has a bit of a funny name, since it actually applies
-   recognizers, but this seemed clearer given the start_type_printers
-   and free_type_printers functions.  */
+   is responsible for freeing the string.  Otherwise, return NULL.  */
 
 char *
-apply_type_printers (void *printers, struct type *type)
+gdbpy_apply_type_printers (const struct script_type_printers *slang_printers,
+			   struct type *type)
 {
   struct cleanup *cleanups;
   PyObject *type_obj, *type_module = NULL, *func = NULL;
   PyObject *result_obj = NULL;
-  PyObject *printers_obj = printers;
+  PyObject *printers_obj = slang_printers->py_type_printers;
   char *result = NULL;
 
   if (printers_obj == NULL)
@@ -1338,10 +1370,10 @@ apply_type_printers (void *printers, struct type *type)
 /* Free the result of start_type_printers.  */
 
 void
-free_type_printers (void *arg)
+gdbpy_free_type_printers (struct script_type_printers *slang_printers)
 {
   struct cleanup *cleanups;
-  PyObject *printers = arg;
+  PyObject *printers = slang_printers->py_type_printers;
 
   if (printers == NULL)
     return;
@@ -1379,61 +1411,6 @@ static void
 python_command (char *arg, int from_tty)
 {
   python_interactive_command (arg, from_tty);
-}
-
-void
-eval_python_from_control_command (struct command_line *cmd)
-{
-  error (_("Python scripting is not supported in this copy of GDB."));
-}
-
-void
-source_python_script (FILE *file, const char *filename)
-{
-  throw_error (UNSUPPORTED_ERROR,
-	       _("Python scripting is not supported in this copy of GDB."));
-}
-
-int
-gdbpy_should_stop (struct breakpoint_object *bp_obj)
-{
-  internal_error (__FILE__, __LINE__,
-		  _("gdbpy_should_stop called when Python scripting is  " \
-		    "not supported."));
-}
-
-int
-gdbpy_breakpoint_has_py_cond (struct breakpoint_object *bp_obj)
-{
-  internal_error (__FILE__, __LINE__,
-		  _("gdbpy_breakpoint_has_py_cond called when Python " \
-		    "scripting is not supported."));
-}
-
-void *
-start_type_printers (void)
-{
-  return NULL;
-}
-
-char *
-apply_type_printers (void *ignore, struct type *type)
-{
-  return NULL;
-}
-
-void
-free_type_printers (void *arg)
-{
-}
-
-enum py_bt_status
-apply_frame_filter (struct frame_info *frame, int flags,
-		    enum py_frame_args args_type,
-		    struct ui_out *out, int frame_low,
-		    int frame_high)
-{
-  return PY_BT_NO_FILTERS;
 }
 
 #endif /* HAVE_PYTHON */
@@ -1735,7 +1712,7 @@ message == an error message without a stack will be printed."),
    command installed.  */
 
 void
-finish_python_initialization (void)
+gdbpy_finish_initialization (void)
 {
   PyObject *m;
   char *gdb_pythondir;
@@ -1812,6 +1789,12 @@ finish_python_initialization (void)
   gdbpy_print_stack ();
   warning (_("internal error: Unhandled Python exception"));
   do_cleanups (cleanup);
+}
+
+int
+gdbpy_initialized (void)
+{
+  return gdb_python_initialized;
 }
 
 #endif /* HAVE_PYTHON */

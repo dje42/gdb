@@ -25,8 +25,6 @@
 #include "valprint.h"
 
 #include "python.h"
-
-#ifdef HAVE_PYTHON
 #include "python-internal.h"
 
 /* Return type of print_string_repr.  */
@@ -300,7 +298,7 @@ print_stack_unless_memory_error (struct ui_file *stream)
     gdbpy_print_stack ();
 }
 
-/* Helper for apply_val_pretty_printer which calls to_string and
+/* Helper for gdbpy_apply_val_pretty_printer which calls to_string and
    formats the result.  */
 
 static enum string_repr_result
@@ -467,7 +465,7 @@ push_dummy_python_frame (void)
 }
 #endif
 
-/* Helper for apply_val_pretty_printer that formats children of the
+/* Helper for gdbpy_apply_val_pretty_printer that formats children of the
    printer, if any exist.  If is_py_none is true, then nothing has
    been printed by to_string, and format output accordingly. */
 static void
@@ -687,12 +685,12 @@ print_children (PyObject *printer, const char *hint,
 }
 
 int
-apply_val_pretty_printer (struct type *type, const gdb_byte *valaddr,
-			  int embedded_offset, CORE_ADDR address,
-			  struct ui_file *stream, int recurse,
-			  const struct value *val,
-			  const struct value_print_options *options,
-			  const struct language_defn *language)
+gdbpy_apply_val_pretty_printer (struct type *type, const gdb_byte *valaddr,
+				int embedded_offset, CORE_ADDR address,
+				struct ui_file *stream, int recurse,
+				const struct value *val,
+				const struct value_print_options *options,
+				const struct language_defn *language)
 {
   struct gdbarch *gdbarch = get_type_arch (type);
   PyObject *printer = NULL;
@@ -838,18 +836,3 @@ gdbpy_default_visualizer (PyObject *self, PyObject *args)
   cons = find_pretty_printer (val_obj);
   return cons;
 }
-
-#else /* HAVE_PYTHON */
-
-int
-apply_val_pretty_printer (struct type *type, const gdb_byte *valaddr,
-			  int embedded_offset, CORE_ADDR address,
-			  struct ui_file *stream, int recurse,
-			  const struct value *val,
-			  const struct value_print_options *options,
-			  const struct language_defn *language)
-{
-  return 0;
-}
-
-#endif /* HAVE_PYTHON */

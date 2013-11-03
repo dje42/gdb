@@ -179,7 +179,7 @@ gdb_test "python TestBreakpoint()" "TestBreakpoint init" \
 gdb_test "continue" \
          "\"FinishBreakpoint\" cannot be set on a dummy frame.*" \
          "don't allow FinishBreakpoint on dummy frames"
-gdb_test "print i" "8" "check stopped location"
+gdb_test "print i" "8" "check stopped location (dummy frame)"
 
 #
 # Test FinishBreakpoint in BP condition evaluation 
