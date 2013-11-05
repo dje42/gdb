@@ -31,7 +31,7 @@
 ;;;
 ;;; Code:
 
-(define-module (system vm elf)
+(define-module (gdb elf)
   #:use-module (rnrs bytevectors)
   #:use-module (system foreign)
   #:use-module (srfi srfi-9) 
