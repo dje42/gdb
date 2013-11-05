@@ -41,8 +41,8 @@ Importing the gdb module into Scheme:
 Implementation/Hacking notes:
 
   Don't use scm_is_false.
-  They brought over () == #f from Lisp and it's not clear how treating them
-  as equivalent for truth values will affect the GDB interface.
+  For this C function, () == #f (a la Lisp) and it's not clear how treating
+  them as equivalent for truth values will affect the GDB interface.
   Until the affect is clear avoid them.
   Instead use gdbscm_is_false, gdbscm_is_true, gdbscm_is_bool.
   There are macros in guile-internal.h to enforce this.
@@ -63,7 +63,7 @@ Implementation/Hacking notes:
   Don't do something that can cause a Scheme exception inside a TRY_CATCH,
   and, in code that can be called from Scheme, don't do something that can
   cause a GDB exception outside a TRY_CATCH.
-  This makes the code a little tricky to write somethings, but it is a
+  This makes the code a little tricky to write sometimes, but it is a
   rule imposed by the programming environment.  Bugs often happen because
   this rule is broken.  Learn it, follow it.
 
