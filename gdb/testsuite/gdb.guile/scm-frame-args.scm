@@ -29,15 +29,15 @@
    (lambda (printer) "super struct")
    (lambda (printer)
      (make-iterator val
-			(make-field-iterator (value-type val))
-			(lambda (iter)
-			  (let ((field (iterator-next!
-					(iterator-progress iter))))
-			    (and field
-				 (let ((name (field-name field)))
-				   (cons
-				    name
-				    (value-field val name))))))))))
+		    (make-field-iterator (value-type val))
+		    (lambda (iter)
+		      (let ((field (iterator-next!
+				    (iterator-progress iter))))
+			(and field
+			     (let ((name (field-name field)))
+			       (cons
+				name
+				(value-field val name))))))))))
 
 (define (get-type-for-printing val)
   "Return type of val, stripping away typedefs, etc."
