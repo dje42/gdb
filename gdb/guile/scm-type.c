@@ -51,6 +51,7 @@ typedef struct _type_smob
 
 typedef struct
 {
+  /* This always appears first.  */
   gdb_smob base;
 
   /* Backlink to the containing <gdb:type> object.  */
