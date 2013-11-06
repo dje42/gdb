@@ -1476,7 +1476,6 @@ The result is \"unspecified\"." },
 
   { "value-print", 1, 0, 0, gdbscm_value_print,
     "\
-args: <gdb:value>\n\
 Return the string representation (print form) of the value." },
 
   { "parse-and-eval", 1, 0, 0, gdbscm_parse_and_eval,
