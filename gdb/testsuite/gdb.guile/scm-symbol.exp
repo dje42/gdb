@@ -59,6 +59,12 @@ if ![gdb_guile_runto_main] {
     return
 }
 
+# Test symbol eq? and equal?.
+gdb_test "guile (print (eq? (lookup-global-symbol \"main\") (lookup-global-symbol \"main\")))" \
+    "= #t"
+gdb_test "guile (print (equal? (lookup-global-symbol \"main\") (lookup-global-symbol \"main\")))" \
+    "= #t"
+
 gdb_breakpoint [gdb_get_line_number "Block break here."]
 gdb_continue_to_breakpoint "Block break here."
 gdb_scm_test_silent_cmd "guile (define frame (selected-frame))" \

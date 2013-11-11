@@ -395,6 +395,46 @@ gdbscm_remove_objfile_ref (struct objfile *objfile,
   if (g_smob->next)
     g_smob->next->prev = g_smob->prev;
 }
+
+/* Create a hash table for mapping a pointer to a gdb data structure to the
+   gsmob that wraps it.  */
+
+htab_t
+gdbscm_create_gsmob_ptr_map (htab_hash hash_fn, htab_eq eq_fn)
+{
+  htab_t htab = htab_create_alloc (7, hash_fn, eq_fn,
+				   NULL, xcalloc, xfree);
+
+  return htab;
+}
+
+/* Return a pointer to the htab entry for the gsmob wrapping PTR.
+   If INSERT is non-zero, create an entry if one doesn't exist.
+   Otherwise NULL is returned if the entry is not found.  */
+
+void **
+gdbscm_find_gsmob_ptr_slot (htab_t htab, void *ptr, int insert)
+{
+  void **slot = htab_find_slot (htab, ptr, insert ? INSERT : NO_INSERT);
+
+  return slot;
+}
+
+/* Remove PTR from HTAB.
+   PTR is a pointer to a gsmob that wraps a pointer to a GDB datum.
+   This is used, for example, when an object is freed.
+
+   It is an error to call this if PTR is not in HTAB (only because it allows
+   for some consistency checking).  */
+
+void
+gdbscm_clear_gsmob_ptr_slot (htab_t htab, void *ptr)
+{
+  void **slot = htab_find_slot (htab, ptr, NO_INSERT);
+
+  gdb_assert (slot != NULL);
+  htab_clear_slot (htab, slot);
+}
 
 /* Initialize the Scheme gsmobs code.  */
 

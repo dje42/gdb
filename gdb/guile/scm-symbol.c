@@ -32,14 +32,16 @@
 /* The <gdb:symbol> smob.  */
 
 typedef struct {
-  /* This always appears first.
-     A symbol object is associated with an objfile, so use a chained_gdb_smob
-     to keep track of all symbols associated with the objfile.  This lets us
-     invalidate the underlying struct symbol when the objfile is deleted.  */
-  chained_gdb_smob base;
+  /* This always appears first.  */
+  gdb_smob base;
 
   /* The GDB symbol structure this smob is wrapping.  */
   struct symbol *symbol;
+
+  /* Backlink to our containing SCM.
+     This is used by the eq? machinery: We need to be able to see if we have
+     already created a gsmob for a symbol, and if so use that SCM.  */
+  SCM containing_scm;
 } symbol_smob;
 
 static const char symbol_smob_name[] = "gdb:symbol";
@@ -56,6 +58,46 @@ static const struct objfile_data *syscm_objfile_data_key;
 
 /* Administrivia for symbol smobs.  */
 
+/* Helper function to hash a symbol_smob.  */
+
+static hashval_t
+syscm_hash_symbol_smob (const void *p)
+{
+  const symbol_smob *s_smob = p;
+
+  return htab_hash_pointer (s_smob->symbol);
+}
+
+/* Helper function to compute equality of symbol_smobs.  */
+
+static int
+syscm_eq_symbol_smob (const void *ap, const void *bp)
+{
+  const symbol_smob *a = ap;
+  const symbol_smob *b = bp;
+
+  return a->symbol == b->symbol;
+}
+
+/* Return the struct symbol pointer -> SCM mapping table.
+   It is created if necessary.  */
+
+static htab_t
+syscm_objfile_symbol_map (struct symbol *symbol)
+{
+  struct objfile *objfile = SYMBOL_SYMTAB (symbol)->objfile;
+  htab_t htab = objfile_data (objfile, syscm_objfile_data_key);
+
+  if (htab == NULL)
+    {
+      htab = gdbscm_create_gsmob_ptr_map (syscm_hash_symbol_smob,
+					  syscm_eq_symbol_smob);
+      set_objfile_data (objfile, syscm_objfile_data_key, htab);
+    }
+
+  return htab;
+}
+
 /* The smob "mark" function for <gdb:symbol>.  */
 
 static SCM
@@ -63,8 +105,10 @@ syscm_mark_symbol_smob (SCM self)
 {
   symbol_smob *s_smob = (symbol_smob *) SCM_SMOB_DATA (self);
 
+  /* There's no need to mark containing_scm.  */
+
   /* Do this last.  */
-  return gdbscm_mark_chained_gsmob (&s_smob->base);
+  return gdbscm_mark_gsmob (&s_smob->base);
 }
 
 /* The smob "free" function for <gdb:symbol>.  */
@@ -74,11 +118,13 @@ syscm_free_symbol_smob (SCM self)
 {
   symbol_smob *s_smob = (symbol_smob *) SCM_SMOB_DATA (self);
 
-  gdbscm_remove_objfile_ref ((s_smob->symbol != NULL
-			      && SYMBOL_SYMTAB (s_smob->symbol) != NULL)
-			     ? SYMBOL_SYMTAB (s_smob->symbol)->objfile
-			     : NULL,
-			     syscm_objfile_data_key, &s_smob->base);
+  if (s_smob->symbol != NULL)
+    {
+      htab_t htab = syscm_objfile_symbol_map (s_smob->symbol);
+
+      gdbscm_clear_gsmob_ptr_slot (htab, s_smob);
+    }
+
   /* Not necessary, done to catch bugs.  */
   s_smob->symbol = NULL;
 
@@ -133,7 +179,7 @@ syscm_make_symbol_smob (void)
 
   s_smob->symbol = NULL;
   s_scm = scm_new_smob (symbol_smob_tag, (scm_t_bits) s_smob);
-  gdbscm_init_chained_gsmob (&s_smob->base);
+  gdbscm_init_gsmob (&s_smob->base);
 
   return s_scm;
 }
@@ -155,47 +201,44 @@ gdbscm_symbol_p (SCM scm)
 }
 
 /* Create a new <gdb:symbol> object that encapsulates SYMBOL.
-   The new symbol is registered with the life-cycle chain of the
-   associated objfile (if any).  */
-
-SCM
-syscm_gsmob_from_symbol (struct symbol *symbol)
-{
-  SCM s_scm = syscm_make_symbol_smob ();
-  symbol_smob *s_smob = (symbol_smob *) SCM_SMOB_DATA (s_scm);
-
-  gdbscm_add_objfile_ref (SYMBOL_SYMTAB (symbol)
-			  ? SYMBOL_SYMTAB (symbol)->objfile
-			  : NULL,
-			  syscm_objfile_data_key, &s_smob->base);
-  s_smob->symbol = symbol;
-
-  return s_scm;
-}
-
-/* Create a new <gdb:symbol> object that encapsulates SYMBOL.
    The object is passed through *smob->scm*.
    A Scheme exception is thrown if there is an error.  */
 
 SCM
 syscm_scm_from_symbol_unsafe (struct symbol *symbol)
 {
-  /* This doesn't use syscm_gsmob_from_symbol because we don't want to
-     cause any side-effects until we know the conversion worked.  */
-  SCM s_scm = syscm_make_symbol_smob ();
-  symbol_smob *s_smob = (symbol_smob *) SCM_SMOB_DATA (s_scm);
+  htab_t htab;
+  void **slot;
+  SCM s_scm;
+  symbol_smob *s_smob, s_smob_for_lookup;
   SCM result;
+
+  /* If we've already created a gsmob for this symbol, return it.
+     This makes symbols eq?-able.
+     We call gdbscm_find_gsmob_ptr_slot twice because we don't want to leave
+     the side-effect of the INSERT behind if we later throw an exception.  */
+  htab = syscm_objfile_symbol_map (symbol);
+  s_smob_for_lookup.symbol = symbol;
+  slot = gdbscm_find_gsmob_ptr_slot (htab, &s_smob_for_lookup, 0);
+  if (slot != NULL)
+    {
+      s_smob = *slot;
+      return s_smob->containing_scm;
+    }
+
+  s_scm = syscm_make_symbol_smob ();
+  s_smob = (symbol_smob *) SCM_SMOB_DATA (s_scm);
 
   result = gdbscm_scm_from_gsmob_unsafe (s_scm);
 
   if (gdbscm_is_exception (result))
     gdbscm_throw (result);
 
-  gdbscm_add_objfile_ref (SYMBOL_SYMTAB (symbol)
-			  ? SYMBOL_SYMTAB (symbol)->objfile
-			  : NULL,
-			  syscm_objfile_data_key, &s_smob->base);
   s_smob->symbol = symbol;
+  s_smob->containing_scm = result;
+
+  slot = gdbscm_find_gsmob_ptr_slot (htab, s_smob, 1);
+  *slot = s_smob;
 
   return result;
 }
@@ -282,26 +325,33 @@ syscm_get_valid_symbol_arg_unsafe (SCM self, int arg_pos,
   return s_smob->symbol;
 }
 
+/* Helper function for syscm_del_objfile_symbols to mark the symbol
+   as invalid.  */
+
+static int
+syscm_mark_symbol_invalid (void **slot, void *info)
+{
+  symbol_smob *s_smob = (symbol_smob *) *slot;
+
+  s_smob->symbol = NULL;
+  return 1;
+}
+
 /* This function is called when an objfile is about to be freed.
    Invalidate the symbol as further actions on the symbol would result
    in bad data.  All access to s_smob->symbol should be gated by
-   syscm_get_valid_symbol_smob_arg which will raise an exception on invalid
-   symbols.  */
+   syscm_get_valid_symbol_smob_arg_unsafe which will raise an exception on
+   invalid symbols.  */
 
 static void
 syscm_del_objfile_symbols (struct objfile *objfile, void *datum)
 {
-  symbol_smob *s_smob = datum;
+  htab_t htab = datum;
 
-  while (s_smob != NULL)
+  if (htab != NULL)
     {
-      symbol_smob *next = (symbol_smob *) s_smob->base.next;
-
-      s_smob->symbol = NULL;
-      s_smob->base.next = NULL;
-      s_smob->base.prev = NULL;
-
-      s_smob = next;
+      htab_traverse_noresize (htab, syscm_mark_symbol_invalid, NULL);
+      htab_delete (htab);
     }
 }
 

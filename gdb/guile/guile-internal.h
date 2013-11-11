@@ -23,6 +23,7 @@
 #ifndef GDB_GUILE_INTERNAL_H
 #define GDB_GUILE_INTERNAL_H
 
+#include "hashtab.h"
 #include "scripting.h"
 #include "symtab.h"
 #include "libguile.h"
@@ -213,6 +214,12 @@ extern void gdbscm_add_objfile_ref (struct objfile *objfile,
 extern void gdbscm_remove_objfile_ref (struct objfile *objfile,
 				       const struct objfile_data *data_key,
 				       chained_gdb_smob *g_smob);
+
+extern htab_t gdbscm_create_gsmob_ptr_map (htab_hash hash_fn, htab_eq eq_fn);
+
+extern void **gdbscm_find_gsmob_ptr_slot (htab_t htab, void *ptr, int insert);
+
+extern void gdbscm_clear_gsmob_ptr_slot (htab_t htab, void *ptr);
 
 /* Exceptions and calling out to Guile.  */
 
